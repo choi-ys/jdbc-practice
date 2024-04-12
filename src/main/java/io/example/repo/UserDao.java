@@ -3,12 +3,14 @@ package io.example.repo;
 import static io.example.config.ConnectionManager.getConnection;
 
 import io.example.domain.User;
+import io.example.template.JdbcTemplate;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 
 public class UserDao {
     private static final Logger log = LoggerFactory.getLogger(UserDao.class);
@@ -16,18 +18,16 @@ public class UserDao {
     public void save(User user) {
         final String sql = "INSERT INTO USERS VALUES(?, ?, ?, ?)";
 
-        try (Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql)
-        ) {
-            preparedStatement.setString(1, user.getUserId());
-            preparedStatement.setString(2, user.getPassword());
-            preparedStatement.setString(3, user.getName());
-            preparedStatement.setString(4, user.getEmail());
-
-            preparedStatement.executeUpdate();
-        } catch (Exception e) {
-            log.error(e.getMessage());
-        }
+        JdbcTemplate jdbcTemplate = new JdbcTemplate();
+        jdbcTemplate.executeUpdate(sql, new PreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement preparedStatement) throws SQLException {
+                preparedStatement.setString(1, user.getUserId());
+                preparedStatement.setString(2, user.getPassword());
+                preparedStatement.setString(3, user.getName());
+                preparedStatement.setString(4, user.getEmail());
+            }
+        });
     }
 
     public User findByUserId(String userId) {

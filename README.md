@@ -365,3 +365,11 @@ public class UserDao {
     }
 }
 ```
+---
+### Step 3 : JdbcTemplate을 이용한 코드 가독성 개선 리팩토링
+#### Step3의 구현 내용
+- JdbcTemplate.java : 보일러 플레이트 성으로 작성되는 Java SQL 간의 매핑 부의 중복을 제거하고 간소화된 형식을 제공하는 라이브러리 성 코드
+- 변경될 수 있는 부분을 외부로부터 주입 받아 코드 내 변경을 최소화
+  - SQL문
+  - PrepareStatement의 쿼리 파라미터 설정 부
+- Functional Interface인 PreparedStatementSetter를 적용하여 코드 가독성 개선
