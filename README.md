@@ -263,5 +263,105 @@ public class UserDao {
         throw new RuntimeException("Execute Query failed");
     }
 }
+```
+---
+### Step2 : Spring JDBC의 HikariCP를 이용하여 커넥션 풀에 생성된 커넥션을 이용한 회원 CRUD 구현
+#### Step2의 구현 내용
+- ConnectionManager.java : DriverManager를 통해 Connection을 생성하는 부분을 UserDao로부터 분리 (관심사 분리)
+   - DriverManager를 통해 Connection을 생성하는 부분을 HikariCP에 미리 생성된 커넥션을 획득하는 부분으로 변경
+   - 커넥션 풀이 미리 생성될 커넥션 수 설정을 위한 Maximum pool size 설정 추가
+   - 커넥션 풀을 하나만 가지도록 static 영역에 DataSource 객체를 선언한 후, static 영역에서 초기화
+   - DBCP 관련 설정 하드 코딩 상수화
+- Closeable, AutoCloseable 구현체인 Connection, PrepareStatement 자원 자동 반납을 위한 try~resource 구문 적용
+  - try~resource문 적용으로 인해 자원 반납 코드 누락으로 인한 메모리 누수 방지 및 비지니스 코드의 가독성 개선
+```java
+public class ConnectionManager {
+    private static final String DB_DRIVER = "org.h2.Driver";
+    private static final String DB_URL = "jdbc:h2:mem://localhost/~/jdbc-practice;MODE=MySQL;DB_CLOSE_DELAY=-1";
+    private static final String DB_USERNAME = "sa";
+    private static final String DB_PW = "";
+    private static final int MAX_POOL_SIZE = 40;
 
+    private static final DataSource dataSource;
+
+    static {
+        HikariDataSource hikariDataSource = new HikariDataSource();
+        hikariDataSource.setDriverClassName(DB_DRIVER);
+        hikariDataSource.setJdbcUrl(DB_URL);
+        hikariDataSource.setUsername(DB_USERNAME);
+        hikariDataSource.setPassword(DB_PW);
+        hikariDataSource.setMaximumPoolSize(MAX_POOL_SIZE);
+
+        dataSource = hikariDataSource;
+    }
+
+    public static Connection getConnection() {
+        try {
+            return dataSource.getConnection();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static DataSource getDataSource() {
+        return dataSource;
+    }
+}
+```
+```java
+public class UserDao {
+    private static final Logger log = LoggerFactory.getLogger(UserDao.class);
+
+    public void save(User user) {
+        final String sql = "INSERT INTO USERS VALUES(?, ?, ?, ?)";
+
+        try (Connection connection = getConnection();
+            PreparedStatement preparedStatement = connection.prepareStatement(sql)
+        ) {
+            preparedStatement.setString(1, user.getUserId());
+            preparedStatement.setString(2, user.getPassword());
+            preparedStatement.setString(3, user.getName());
+            preparedStatement.setString(4, user.getEmail());
+
+            preparedStatement.executeUpdate();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    public User findByUserId(String userId) {
+        final String sql = "SELECT userId, password, name, email FROM USERS WHERE userId = ?";
+
+        ResultSet resultSet = null;
+
+        try (
+            Connection connection = getConnection();
+            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+        ) {
+            preparedStatement.setString(1, userId);
+            resultSet = preparedStatement.executeQuery();
+
+            if (resultSet.next()) {
+                return User.of(
+                    resultSet.getString("userId"),
+                    resultSet.getString("password"),
+                    resultSet.getString("name"),
+                    resultSet.getString("email")
+                );
+            }
+        } catch (SQLException e) {
+            log.error(e.getMessage());
+        } finally {
+            try {
+                if (resultSet != null) {
+                    resultSet.close();
+                    log.info("ResultSet closed");
+                }
+            } catch (SQLException ex) {
+                log.error("Resource Closed Failed");
+            }
+        }
+        throw new RuntimeException("Execute Query failed");
+    }
+}
 ```
