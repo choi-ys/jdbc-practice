@@ -37,3 +37,231 @@ JDBC와 DBCP를 활용한 간단한 CRUD 학습
 - Step1. DriverManager를 이용하여 매 요청 마다 커넥션을 생성하여 처리하는 회원 CRUD 구현
 - Step2. Spring JDBC의 HikariCP를 이용하여 커넥션 풀에 생성된 커넥션을 이용한 회원 CRUD 구현
 - Step3. JdbcTemplate을 이용한 코드 가독성 개선 리펙토링
+
+### Step1 : DriverManager를 이용하여 매 요청 마다 커넥션 생성 후 처리하는 회원 저장 및 조회 구현
+#### Step1 구현 내용
+1. User 객체를 DB 에 저장/조회 하기 위해 DB와의 통신을 담당하는 UserDao를 `TDD 방식`으로 구현
+    - `test/resources/db_schema.sql` : H2 In-memory DB 환경에서 TC 구동을 위해 필요한 `Table 생성 SQL script` 작성
+```mysql-sql
+DROP TABLE IF EXISTS USERS;
+    
+CREATE TABLE USERS (
+    userId          varchar(12)		NOT NULL,
+    password		varchar(12)		NOT NULL,
+    name			varchar(20)		NOT NULL,
+    email			varchar(50),
+    
+    PRIMARY KEY               (userId)
+);
+```
+2. TC 수행 시 `test/resources/db_schema.sql`에 위치한 Script 실행을 위한 setUp 메소드 작성
+    - `UserDaoTest.java` : TC 수행 전 ClassPath의 Resource(DDL Script) 실행을 위한 ResourceDatabasePopular 객체 설정
+    - `ConnectionManager.java` : Script 실행을 위해 대상 DB(H2 In-memory)와 통신하기 위해 필요한 DataSource(Hikari) 객체 생성
+```Java
+public class UserDaoTest {
+    @BeforeEach
+    void setUp() {
+        ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+        populator.addScript(new ClassPathResource("db_schema.sql"));
+        DatabasePopulatorUtils.execute(populator, ConnectionManager.getDataSource());
+    }
+}
+```
+```Java
+public class ConnectionManager {
+    public static DataSource getDataSource() {
+        HikariDataSource hikariDataSource = new HikariDataSource();
+        hikariDataSource.setDriverClassName("org.h2.Driver");
+        hikariDataSource.setJdbcUrl("jdbc:h2:mem://localhost/~/jdbc-practice;MODE=MySQL;DB_CLOSE_DELAY=-1");
+        hikariDataSource.setUsername("sa");
+        hikariDataSource.setPassword("");
+
+        return hikariDataSource;
+    }
+}
+```
+3. User객체의 DB 저장을 위한 UserDAO의 create() 메서드 TC 구현
+    - `User.java` : 저장 대상 User 객체 설계 및 구현
+    - `UserDao.java` : User 객체 저장을 위해 DB로 Insert 구문을 요청할 UserDao의 create 메서드 구현
+        - `DriverManager`를 이용한 커넥션 생성 부 구현
+        - DB에 실행 SQL 전달하기 위해 Connection객체로 부터 PrepareStatement 객체 획득
+        - PrepareStatement를 이용한 User Insert 쿼리 파라미터 설정 및 쿼리 실행
+        - PrepareStatement를 이용하여 User Select 쿼리 파라미터 설정 및 쿼리 실행
+            - User Select 쿼리 실행 후, ResultSet에 반환된 User column을 User 객체로 변환
+        - finally 구문에서 DB 통신을 위해 사용한 자원(Connection, PrepareStatement, ResultSet) 반납 처리 구현
+```java
+public class UserDaoTest {
+    @BeforeEach
+    void setUp() {...}
+    
+    @Test
+    @DisplayName("회원 저장")
+    void saveUser() {
+        // Given
+        final String userId = "choi-ys";
+        final String password = "password";
+        final String name = "name";
+        final String email = "email";
+
+        User given = User.of(userId, password, name, email);
+
+        // When
+        UserDao userDao = new UserDao();
+        userDao.save(given);
+
+        // Then
+        User actual = userDao.findByUserId(userId);
+        assertThat(actual).isEqualTo(given);
+    }
+}
+```
+```java
+public class User {
+    private String userId;
+    private String password;
+    private String name;
+    private String email;
+
+    private User(String userId, String password, String name, String email) {
+        this.userId = userId;
+        this.password = password;
+        this.name = name;
+        this.email = email;
+    }
+
+    public static User of(String userId, String password, String name, String email) {
+        return new User(userId, password, name, email);
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        User user = (User) o;
+        return Objects.equals(userId, user.userId) && Objects.equals(password, user.password) && Objects.equals(name,
+            user.name) && Objects.equals(email, user.email);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(userId, password, name, email);
+    }
+}
+```
+```java
+public class UserDao {
+    private static final Logger log = LoggerFactory.getLogger(UserDao.class);
+
+    private static Connection getConnection() {
+        String url = "jdbc:h2:mem://localhost/~/jdbc-practice;MODE=MySQL;DB_CLOSE_DELAY=-1";
+        String id = "sa";
+        String password = "";
+        try {
+            return DriverManager.getConnection(url, id, password);
+        } catch (SQLException e) {
+            log.error(e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void save(User user) {
+        final String sql = "INSERT INTO USERS VALUES(?, ?, ?, ?)";
+
+        Connection connection = getConnection();
+        PreparedStatement preparedStatement = null;
+
+        try {
+            preparedStatement = connection.prepareStatement(sql);
+
+            preparedStatement.setString(1, user.getUserId());
+            preparedStatement.setString(2, user.getPassword());
+            preparedStatement.setString(3, user.getName());
+            preparedStatement.setString(4, user.getEmail());
+
+            preparedStatement.executeUpdate();
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        } finally {
+            try {
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                    log.info("preparedStatement closed");
+                }
+
+                if (connection != null) {
+                    connection.close();
+                    log.info("connection closed");
+                }
+            } catch (SQLException ex) {
+                log.error("Resource Closed Failed");
+            }
+        }
+    }
+
+    public User findByUserId(String userId) {
+        final String sql = "SELECT userId, password, name, email FROM USERS WHERE userId = ?";
+
+        Connection connection = getConnection();
+        PreparedStatement preparedStatement = null;
+        ResultSet resultSet = null;
+
+        try {
+            preparedStatement = connection.prepareStatement(sql);
+            preparedStatement.setString(1, userId);
+
+            resultSet = preparedStatement.executeQuery();
+
+            if (resultSet.next()) {
+                return User.of(
+                    resultSet.getString("userId"),
+                    resultSet.getString("password"),
+                    resultSet.getString("name"),
+                    resultSet.getString("email")
+                );
+            }
+        } catch (SQLException e) {
+            log.error(e.getMessage());
+        } finally {
+            try {
+                if (resultSet != null) {
+                    resultSet.close();
+                    log.info("ResultSet closed");
+                }
+                if (preparedStatement != null) {
+                    preparedStatement.close();
+                    log.info("PreparedStatement closed");
+                }
+
+                if (connection != null) {
+                    connection.close();
+                    log.info("Connection closed");
+                }
+            } catch (SQLException ex) {
+                log.error("Resource Closed Failed");
+            }
+        }
+        throw new RuntimeException("Execute Query failed");
+    }
+}
+
+```
