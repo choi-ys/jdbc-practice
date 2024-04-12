@@ -1,12 +1,8 @@
 package io.example.repo;
 
-import static io.example.config.ConnectionManager.getConnection;
-
 import io.example.domain.User;
 import io.example.template.JdbcTemplate;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,35 +29,16 @@ public class UserDao {
     public User findByUserId(String userId) {
         final String sql = "SELECT userId, password, name, email FROM USERS WHERE userId = ?";
 
-        ResultSet resultSet = null;
-
-        try (
-            Connection connection = getConnection();
-            PreparedStatement preparedStatement = connection.prepareStatement(sql);
-        ) {
-            preparedStatement.setString(1, userId);
-            resultSet = preparedStatement.executeQuery();
-
-            if (resultSet.next()) {
-                return User.of(
-                    resultSet.getString("userId"),
-                    resultSet.getString("password"),
-                    resultSet.getString("name"),
-                    resultSet.getString("email")
-                );
-            }
-        } catch (SQLException e) {
-            log.error(e.getMessage());
-        } finally {
-            try {
-                if (resultSet != null) {
-                    resultSet.close();
-                    log.info("ResultSet closed");
-                }
-            } catch (SQLException ex) {
-                log.error("Resource Closed Failed");
-            }
-        }
-        throw new RuntimeException("Execute Query failed");
+        JdbcTemplate jdbcTemplate = new JdbcTemplate();
+        return jdbcTemplate.executeQuery(
+            sql,
+            preparedStatement -> preparedStatement.setString(1, userId),
+            (resultSet, rowNum) -> User.of(
+                resultSet.getString("userId"),
+                resultSet.getString("password"),
+                resultSet.getString("name"),
+                resultSet.getString("email")
+            )
+        );
     }
 }

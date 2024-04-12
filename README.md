@@ -372,4 +372,6 @@ public class UserDao {
 - 변경될 수 있는 부분을 외부로부터 주입 받아 코드 내 변경을 최소화
   - SQL문
   - PrepareStatement의 쿼리 파라미터 설정 부
-- Functional Interface인 PreparedStatementSetter를 적용하여 코드 가독성 개선
+- DB 조회 결과인 ResultSet -> User 객체로 변환 시, 필드명 하드 코딩 부 상수화 
+- Functional Interface인 PreparedStatementSetter, RowMapper를 적용하여 코드 가독성 개선
+- executeQuery의 반환 타입에 Generic을 적용하여 반환 타입에 종속적이지 않은 유연한 코드 작성
