@@ -11,6 +11,11 @@ import org.springframework.jdbc.core.PreparedStatementSetter;
 public class UserDao {
     private static final Logger log = LoggerFactory.getLogger(UserDao.class);
 
+    private static final String USER_ID = "userId";
+    private static final String PASSWORD = "password";
+    private static final String NAME = "name";
+    private static final String EMAIL = "email";
+
     public void save(User user) {
         final String sql = "INSERT INTO USERS VALUES(?, ?, ?, ?)";
 
@@ -34,10 +39,10 @@ public class UserDao {
             sql,
             preparedStatement -> preparedStatement.setString(1, userId),
             (resultSet, rowNum) -> User.of(
-                resultSet.getString("userId"),
-                resultSet.getString("password"),
-                resultSet.getString("name"),
-                resultSet.getString("email")
+                resultSet.getString(USER_ID),
+                resultSet.getString(PASSWORD),
+                resultSet.getString(NAME),
+                resultSet.getString(EMAIL)
             )
         );
     }
