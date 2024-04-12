@@ -28,3 +28,12 @@ JDBC와 DBCP를 활용한 간단한 CRUD 학습
 ## Datasource
 - 커넥션 획득을 위한 표준 인터페이스
 - HikariCP의 Datasource 사용
+
+---
+
+# 실습
+## 실습 단계
+- Step0. 실습 Project 생성 및 필요 의존성 추가
+- Step1. DriverManager를 이용하여 매 요청 마다 커넥션을 생성하여 처리하는 회원 CRUD 구현
+- Step2. Spring JDBC의 HikariCP를 이용하여 커넥션 풀에 생성된 커넥션을 이용한 회원 CRUD 구현
+- Step3. JdbcTemplate을 이용한 코드 가독성 개선 리펙토링
